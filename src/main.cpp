@@ -1,10 +1,37 @@
-#include <chrono>
+﻿#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <thread>
 #include <vector>
 
+#include "cpu_temperature.hpp"
 #include "system_state.hpp"
+
+void displayTemperature(double temperature, unsigned long elapsedMs)
+{
+    const SystemState state = evaluateTemperature(temperature);
+
+    std::cout
+        << "["
+        << std::setw(6)
+        << std::setfill('0')
+        << elapsedMs
+        << " ms] "
+        << "TEMP="
+        << std::fixed
+        << std::setprecision(1)
+        << temperature
+        << " C "
+        << "STATE="
+        << stateToString(state);
+
+    if (state == SystemState::FAULT)
+    {
+        std::cout << " FAULT=OVER_TEMPERATURE";
+    }
+
+    std::cout << '\n';
+}
 
 int main()
 {
@@ -13,55 +40,70 @@ int main()
     std::cout << " Raspberry Pi 4 / Embedded Linux\n";
     std::cout << "============================================\n\n";
 
-    const std::vector<double> temperatures =
-    {
-        25.0,
-        32.5,
-        58.0,
-        63.5,
-        70.0,
-        82.0,
-        45.0
-    };
-
     unsigned long elapsedMs = 0;
 
-    for (double temperature : temperatures)
+    const auto cpuTemperature = readCpuTemperatureCelsius();
+
+    if (cpuTemperature.has_value())
     {
-        const SystemState state =
-            evaluateTemperature(temperature);
+        std::cout << "Temperature source: Raspberry Pi CPU\n\n";
 
-        std::cout
-            << "["
-            << std::setw(6)
-            << std::setfill('0')
-            << elapsedMs
-            << " ms] "
-            << "TEMP="
-            << std::fixed
-            << std::setprecision(1)
-            << temperature
-            << " C "
-            << "STATE="
-            << stateToString(state);
-
-        if (state == SystemState::FAULT)
+        for (int i = 0; i < 10; ++i)
         {
-            std::cout
-                << " FAULT=OVER_TEMPERATURE";
+            const auto temperature =
+                readCpuTemperatureCelsius();
+
+            if (!temperature.has_value())
+            {
+                std::cerr
+                    << "ERROR: Unable to read CPU temperature.\n";
+
+                return 1;
+            }
+
+            displayTemperature(
+                temperature.value(),
+                elapsedMs
+            );
+
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(500)
+            );
+
+            elapsedMs += 500;
         }
+    }
+    else
+    {
+        std::cout << "Temperature source: Simulation\n\n";
 
-        std::cout << '\n';
+        const std::vector<double> temperatures =
+        {
+            25.0,
+            32.5,
+            58.0,
+            63.5,
+            70.0,
+            82.0,
+            45.0
+        };
 
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(500)
-        );
+        for (double temperature : temperatures)
+        {
+            displayTemperature(
+                temperature,
+                elapsedMs
+            );
 
-        elapsedMs += 500;
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(500)
+            );
+
+            elapsedMs += 500;
+        }
     }
 
-    std::cout
-        << "\nMonitoring simulation completed.\n";
+    std::cout << "\nMonitoring completed.\n";
 
     return 0;
 }
